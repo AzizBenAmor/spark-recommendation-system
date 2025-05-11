@@ -10,32 +10,27 @@ import spray.json._
 
 import scala.io.StdIn
 
-// JSON case class and serialization
 case class Recommendation(movieId: Int, title: String, rating: Double)
-
+ 
 trait JsonSupport extends DefaultJsonProtocol {
   implicit val recommendationFormat = jsonFormat3(Recommendation)
 }
 
 object MovieRecommenderApi extends App with JsonSupport {
 
-  // Load config (like .env)
   val config = ConfigFactory.load()
   val ratingsPath = config.getString("app.ratingsPath")
   val moviesPath = config.getString("app.moviesPath")
   val numRecs = config.getInt("app.numRecs")
 
-  // Akka setup
   implicit val system = ActorSystem("movie-recommender")
   implicit val materializer = ActorMaterializer()
   import system.dispatcher
 
-  // Spark setup
   val sparkConf = new SparkConf().setAppName("MovieRecommender").setMaster("local[*]")
   val sc = new SparkContext(sparkConf)
   val spark = SparkSession.builder().getOrCreate()
 
-  // Load and cache ratings
   val ratingsRaw = sc.textFile(ratingsPath)
   val ratingsHeader = ratingsRaw.first()
   val ratings = ratingsRaw
@@ -44,7 +39,6 @@ object MovieRecommenderApi extends App with JsonSupport {
     .map(arr => Rating(arr(0).toInt, arr(1).toInt, arr(2).toDouble))
     .cache()
 
-  // Load movie titles
   val moviesRaw = sc.textFile(moviesPath)
   val moviesHeader = moviesRaw.first()
   val movieMap = moviesRaw
@@ -53,10 +47,8 @@ object MovieRecommenderApi extends App with JsonSupport {
     .map(arr => (arr(0).toInt, arr(1)))
     .collectAsMap()
 
-  // Train ALS model
   val model = ALS.train(ratings, rank = 10, iterations = 10, lambda = 0.01)
 
-  // Akka route
   val route =
     path("recommendations" / IntNumber) { userId =>
       get {
